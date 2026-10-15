@@ -143,7 +143,9 @@ def cell(v):
 def write_sheets(books,updated):
     from google.oauth2.service_account import Credentials
     from google.auth.transport.requests import AuthorizedSession
+    print('Google: lendo JSON da conta de serviço.', flush=True)
     info=json.loads(os.environ['GOOGLE_SERVICE_ACCOUNT_JSON'])
+    print('Google: carregando credenciais.', flush=True)
     session=AuthorizedSession(Credentials.from_service_account_info(info,scopes=['https://www.googleapis.com/auth/spreadsheets']))
     sid=os.environ['GOOGLE_SHEETS_ID'].strip()
     if not re.fullmatch(r'[\w-]+',sid):raise RuntimeError('GOOGLE_SHEETS_ID deve conter somente o ID, não a URL.')
@@ -154,6 +156,7 @@ def write_sheets(books,updated):
             if (r.status_code==429 or r.status_code>=500) and attempt<4:time.sleep(2**attempt);continue
             if not r.ok:raise RuntimeError(f'Google Sheets HTTP {r.status_code}. Confira a API Sheets e compartilhe a planilha com client_email da conta de serviço.')
             return r.json()
+    print('Google: acessando a planilha.', flush=True)
     data=call('GET',params={'fields':'sheets.properties'})
     props={x['properties']['title']:x['properties'] for x in data['sheets']}
     requests_body=[];used={x['sheetId'] for x in props.values()}
@@ -172,6 +175,7 @@ def write_sheets(books,updated):
     meta=[['Bookshelf Atlas','Value'],['Last Notion sync',updated],['Records',len(books)],['Read',sum(b['status']=='Read' for b in books)],['Schema',1]]
     mid=tab('Update',len(meta),2)
     requests_body.append({'updateCells':{'range':{'sheetId':mid,'startColumnIndex':0,'endColumnIndex':2},'rows':[{'values':[cell(v) for v in row]} for row in meta],'fields':'userEnteredValue'}})
+    print('Google: gravando os livros e a data de atualização.', flush=True)
     call('POST',':batchUpdate',json={'requests':requests_body})
 
 def main():
@@ -193,13 +197,25 @@ def main():
         if (i+1)%100==0:print(f'Preparados {i+1}/{len(pages)} livros.',flush=True)
     books.sort(key=lambda b:(b['title'].casefold(),b['id']))
     updated=datetime.now(timezone.utc).isoformat()
+    print(f"Preparados {len(books)}/{len(pages)} livros. Iniciando Google Sheets.", flush=True)
     write_sheets(books,updated)
     (ROOT/'site/public/snapshot.json').write_text(json.dumps({'schema':1,'source':'notion','updatedAt':updated,'books':books},ensure_ascii=False,separators=(',',':')))
     ipath.write_text(json.dumps(index,ensure_ascii=False,indent=2))
     print(f'Sincronização concluída: {len(books)} livros. A planilha e a cópia do site foram atualizadas.')
 
-if __name__=='__main__':
-    try:main()
+if __name__ == '__main__':
+    try:
+        main()
     except Exception as e:
-        # Do not dump credentials, signed cover URLs, request bodies or environment.
-        print(f'ERRO: {e if isinstance(e,RuntimeError) else type(e).__name__}',file=sys.stderr);sys.exit(1)
+        import traceback
+        # Report locations only: never print local variables or secret values.
+        print(f'ERRO: {type(e).__name__}', file=sys.stderr, flush=True)
+        if isinstance(e, RuntimeError):
+            print(str(e), file=sys.stderr, flush=True)
+        for frame in traceback.extract_tb(e.__traceback__):
+            print(
+                f'Arquivo: {Path(frame.filename).name} | '
+                f'Linha: {frame.lineno} | Função: {frame.name}',
+                file=sys.stderr, flush=True
+            )
+        sys.exit(1)
