@@ -1,0 +1,53 @@
+
+name: Bookshelf Atlas - Notion to Sheets
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_empty:
+        description: 'Permitir base vazia (apenas se apagou todos os livros de propósito)'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bookshelf-sync
+  cancel-in-progress: false
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: sync/requirements.txt
+
+      - run: python -m pip install -r sync/requirements.txt
+
+      - name: Sincronizar
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
+          ALLOW_EMPTY_SYNC: ${{ inputs.allow_empty && 'true' || 'false' }}
+        run: python sync/sincronizar.py
+
+      - name: Guardar capas e cópia atualizada
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add site/public/covers site/public/snapshot.json sync/cover-index.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Update Bookshelf data and covers'
+            git push
+          fi
