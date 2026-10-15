@@ -1,0 +1,1 @@
+{"name":"bookshelf-atlas","version":"1.0.0","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"dev":"wrangler dev","deploy":"wrangler deploy","check":"node --check worker.js && node --check public/app.js && node --test ../tests/site.test.mjs"},"devDependencies":{"wrangler":"4.92.0"},"packageManager":"pnpm@11.25.0"}

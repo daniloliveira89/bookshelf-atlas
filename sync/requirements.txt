@@ -1,0 +1,3 @@
+requests>=2.32.4,<3
+google-auth>=2.40,<3
+Pillow>=11.3,<13
