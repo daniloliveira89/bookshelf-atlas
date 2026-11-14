@@ -1,0 +1,34 @@
+AUDITORIA TÉCNICA — bookshelf-atlas
+Data: 14/11/2026 (America/Sao_Paulo)
+Repositório: https://github.com/daniloliveira89/bookshelf-atlas
+Branch examinada: main
+Commit examinado: d4e745ee5097e61bb58b5d39bfe67911ed255e12
+Escopo: revisão dos fluxos principais. Somente AUDITORIA.txt é acrescentado; nenhuma melhoria foi aplicada ao projeto.
+Método e limites: Revisão orientada à sincronização Python, modelo, Worker, interface e Apps Script; 17 arquivos de texto coletados. Sintaxe dos fontes Python validada sem importações ou chamadas externas. Não foram usados Notion, Google Sheets ou credenciais; não foram executados gatilhos de Apps Script ou publicação.
+Prioridades: P1 = alta; P2 = média; P3 = baixa. Ordem sugerida de aplicação:
+
+1. [P2] Usar a cópia local mesmo quando o snapshot inicial falha
+Evidência: site/public/app.js:129-141
+Constatação e impacto: A inicialização só lê o cache de localStorage depois de baixar e validar /snapshot.json. Se essa requisição falhar, o catch exibe a tela de erro e ignora um cache local válido. O armazenamento existente não fornece a recuperação esperada nessa situação.
+Melhoria sugerida: Ler e validar o cache antes da rede; renderizá-lo com indicação de idade e tentar snapshot/API em seguida. Diferenciar falta de dados de dados disponíveis porém desatualizados.
+Como validar depois: Salvar um payload válido no armazenamento e simular falha de /snapshot.json e da API: o acervo continua navegável com aviso de atualização pendente.
+
+2. [P2] Validar os formatos de preferências e de livros restaurados
+Evidência: site/public/app.js:4-6,29-32,129
+Constatação e impacto: readStore aceita qualquer JSON válido para goals e order. Por exemplo, order={} chega a order.map e interrompe a renderização dos favoritos. validData verifica alguns campos e arrays, mas não valida números de notas, tipos dos elementos nem data de atualização.
+Melhoria sugerida: Validar cada preferência e o esquema inteiro do payload; descartar apenas os valores inválidos, preservando o restante. Limitar notas, metas e tamanhos antes de renderizar e migrar versões de esquema.
+Como validar depois: Armazenamento com order={}, goals=null, nota infinita, arrays com tipos errados e data inválida não derruba a tela e gera recuperação previsível.
+
+3. [P2] Não silenciar falhas ao salvar metas e ordem
+Evidência: site/public/app.js:5,95,113
+Constatação e impacto: saveStore captura qualquer erro sem comunicar ao usuário. Se a cota estiver cheia ou o armazenamento estiver bloqueado, as metas e a ordem aparentam ter sido salvas e desaparecem ao recarregar.
+Melhoria sugerida: Retornar o resultado da gravação, informar que as mudanças valem apenas para a sessão quando falhar e oferecer exportação/importação das preferências.
+Como validar depois: Simular QuotaExceededError; a interface informa a falha e permite preservar as preferências antes de fechar.
+
+4. [P2] Verificar que tabela e metadados pertencem à mesma publicação
+Evidência: site/worker.js:10-21; sync/sincronizar.py:204-222
+Constatação e impacto: O Python publica a planilha de forma atômica, mas o Worker lê Books e Update em duas requisições paralelas independentes. Uma sincronização entre as duas leituras pode combinar versões distintas. A comparação opcional da quantidade não identifica troca de títulos mantendo o mesmo total.
+Melhoria sugerida: Ler os dois intervalos em uma mesma operação com garantia de consistência, ou conferir um identificador de publicação antes e depois e repetir a leitura quando mudar. Exigir metadados válidos.
+Como validar depois: Simular uma atualização entre as duas leituras com o mesmo número de livros: a API devolve uma versão consistente ou um erro explícito, nunca mistura silenciosamente os dados.
+
+As referências de linha pertencem ao commit examinado. Os testes citados são os executados nesta auditoria; testes sugeridos ainda não foram implementados. A revisão não atesta ausência de outros problemas.
